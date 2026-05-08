@@ -169,7 +169,7 @@ class CameraPoseVisualizer:
         self._scene_points.append(pts)
     
     
-    # Auto select content region
+    # Auto select content region. Rotate a bit too see all content
     def auto_bounds(self, margin=0.08, equal_aspect=True):
         """
         Automatically fit x/y/z limits tightly around all registered content.
