@@ -1,0 +1,4 @@
+# ignore paper demo
+*.pdf
+
+motionblur_demo.py
