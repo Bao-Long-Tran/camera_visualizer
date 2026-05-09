@@ -155,7 +155,10 @@ class CameraPoseVisualizer:
             rstride=1,
             cstride=1,
             facecolors=facecolors,
-            shade=False
+            shade=False,
+            linewidth=0,
+            edgecolor="none",
+            antialiased=False
         )
     
     # Add points
@@ -203,3 +206,109 @@ class CameraPoseVisualizer:
             self.ax.set_xlim(mins[0] - pad[0], maxs[0] + pad[0])
             self.ax.set_ylim(mins[1] - pad[1], maxs[1] + pad[1])
             self.ax.set_zlim(mins[2] - pad[2], maxs[2] + pad[2])
+    
+    
+    # Action to select crop region for saving figure
+    # Press c to start capture
+    # Click two points: top-left and bottom-right
+    def enable_interactive_crop(
+            self,
+            full_path="full_view.png",
+            crop_path="cropped_view.png",
+            dpi=300,
+            trigger_key="c"
+        ):
+        """
+        Enable interactive crop selection.
+
+        Usage:
+            visualizer.enable_interactive_crop()
+            plt.show()
+
+        In the plot window:
+            1. Rotate the 3D plot
+            2. Press 'c'
+            3. Click two points: top-left and bottom-right
+            4. Cropped image is saved
+        """
+
+        self._crop_full_path = full_path
+        self._crop_path = crop_path
+        self._crop_dpi = dpi
+        self._crop_trigger_key = trigger_key
+        self._crop_mode = False
+        self._crop_points = []
+
+        self.fig.canvas.mpl_connect("key_press_event", self._on_crop_key)
+        self.fig.canvas.mpl_connect("button_press_event", self._on_crop_click)
+
+        print(f"Interactive crop enabled. Press '{trigger_key}' then click two points.")
+
+
+    def _on_crop_key(self, event):
+        if event.key == self._crop_trigger_key:
+            self._crop_mode = True
+            self._crop_points = []
+            print("Crop mode ON. Click two points: top-left and bottom-right.")
+
+
+    def _on_crop_click(self, event):
+        if not getattr(self, "_crop_mode", False):
+            return
+
+        if event.x is None or event.y is None:
+            return
+
+        # Convert mouse position from display pixels to figure-relative coordinates
+        # Figure-relative coords: (0,0) bottom-left, (1,1) top-right
+        fig_coord = self.fig.transFigure.inverted().transform((event.x, event.y))
+        self._crop_points.append(fig_coord)
+
+        print(f"Clicked point {len(self._crop_points)}:", fig_coord)
+
+        if len(self._crop_points) == 2:
+            self._crop_current_view()
+            self._crop_mode = False
+            print(f"Cropped image saved to: {self._crop_path}")
+
+
+    def _crop_current_view(self):
+        from PIL import Image
+
+        # Save the current rotated view
+        self.fig.savefig(
+            self._crop_full_path,
+            dpi=self._crop_dpi,
+            bbox_inches=None,
+            pad_inches=0
+        )
+
+        img = Image.open(self._crop_full_path)
+        W, H = img.size
+
+        (x1, y1), (x2, y2) = self._crop_points
+
+        # Convert figure-relative coords to pixel crop box
+        left = int(min(x1, x2) * W)
+        right = int(max(x1, x2) * W)
+
+        # Matplotlib figure coord: y=0 bottom
+        # PIL image coord: y=0 top
+        upper = int((1 - max(y1, y2)) * H)
+        lower = int((1 - min(y1, y2)) * H)
+
+        print("Crop box:", (left, upper, right, lower))
+        # IMPORTANT: create cropped first
+        cropped = img.crop((left, upper, right, lower))
+
+        if self._crop_path.lower().endswith(".pdf"):
+            cropped = cropped.convert("RGB")
+            cropped.save(self._crop_path, "PDF", resolution=self._crop_dpi)
+        else:
+            cropped.save(self._crop_path)
+
+        print(f"Saved full image to: {self._crop_full_path}")
+        print(f"Saved cropped image to: {self._crop_path}")
+
+        if getattr(self, "_crop_close_after_save", True):
+            plt.close(self.fig)
